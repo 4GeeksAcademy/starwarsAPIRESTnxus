@@ -1,51 +1,30 @@
-"""
-This module takes care of starting the API Server, Loading the DB and Adding the endpoints
-"""
-import os
-from flask import Flask, request, jsonify, url_for
+from flask import Flask, jsonify 
 from flask_migrate import Migrate
-from flask_swagger import swagger
-from flask_cors import CORS
-from utils import APIException, generate_sitemap
-from admin import setup_admin
-from models import db, User
-#from models import Person
+from models import db  # Importa solo db desde models
+from routes import api_bp  # Importa las rutas
 
 app = Flask(__name__)
-app.url_map.strict_slashes = False
-
-db_url = os.getenv("DATABASE_URL")
-if db_url is not None:
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_url.replace("postgres://", "postgresql://")
-else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:////tmp/test.db"
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///starwars.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-MIGRATE = Migrate(app, db)
-db.init_app(app)
-CORS(app)
-setup_admin(app)
+db.init_app(app)  
+migrate = Migrate(app, db)
 
-# Handle/serialize errors like a JSON object
-@app.errorhandler(APIException)
-def handle_invalid_usage(error):
-    return jsonify(error.to_dict()), error.status_code
 
-# generate sitemap with all your endpoints
-@app.route('/')
-def sitemap():
-    return generate_sitemap(app)
+app.register_blueprint(api_bp, url_prefix='/api')
 
-@app.route('/user', methods=['GET'])
-def handle_hello():
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify(error="Not Found", message=str(e)), 404
 
-    response_body = {
-        "msg": "Hello, this is your GET /user response "
-    }
+@app.errorhandler(500)
+def internal_error(e):
+    return jsonify(error="Internal Server Error", message=str(e)), 500
 
-    return jsonify(response_body), 200
+def create_db():
+    with app.app_context():
+        db.create_all()
 
-# this only runs if `$ python src/app.py` is executed
 if __name__ == '__main__':
-    PORT = int(os.environ.get('PORT', 3000))
-    app.run(host='0.0.0.0', port=PORT, debug=False)
+    create_db()
+    app.run(debug=True)
